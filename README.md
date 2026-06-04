@@ -46,37 +46,10 @@ Project dùng Vite nên có thể deploy static files lên Nginx trên Ubuntu.
 - Build command: `npm run build`
 - Output directory: `dist`
 
-Ví dụ cấu hình server Ubuntu:
+Hướng dẫn cấu hình Ubuntu, Nginx, GitHub Secrets, GitHub Actions và HTTPS nằm tại:
 
-```bash
-sudo apt update
-sudo apt install -y nginx
-sudo mkdir -p /var/www/portfolio
-sudo chown -R $USER:www-data /var/www/portfolio
-```
-
-Tạo Nginx site:
-
-```nginx
-server {
-    listen 80;
-    server_name thhinfo.xyz www.thhinfo.xyz;
-
-    root /var/www/portfolio;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-Enable site và reload Nginx:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/portfolio
-sudo nginx -t
-sudo systemctl reload nginx
+```text
+deploy/README.md
 ```
 
 Các thông tin GitHub, LinkedIn và ảnh cá nhân đang để dạng placeholder trong `src/data/portfolio.ts`.
