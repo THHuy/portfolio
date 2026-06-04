@@ -1,6 +1,8 @@
 # Deploy Portfolio len Ubuntu
 
-Huong dan nay dung cho project Vite/React deploy static files len Ubuntu server bang Nginx va GitHub Actions.
+Huong dan nay dung cho project Vite/React deploy static files len Ubuntu server bang Nginx va GitHub Actions self-hosted runner.
+
+Self-hosted runner dat ngay tren Ubuntu server se tu ket noi outbound den GitHub. Vi vay AWS security group khong can mo inbound SSH cho GitHub Actions. Ban chi can mo port 80/443 cho website.
 
 ## 1. Chuan bi server Ubuntu
 
@@ -14,7 +16,7 @@ Cap nhat package va cai Nginx:
 
 ```bash
 sudo apt update
-sudo apt install -y nginx
+sudo apt install -y curl nginx
 ```
 
 Tao thu muc deploy:
@@ -94,75 +96,96 @@ Cho DNS cap nhat roi kiem tra:
 ping thhinfo.xyz
 ```
 
-## 4. Tao SSH key cho GitHub Actions
+## 4. Cai Node.js tren server
 
-Tren may local hoac server, tao key rieng cho deploy:
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions-portfolio" -f portfolio_deploy_key
-```
-
-Lenh se tao 2 file:
-
-```text
-portfolio_deploy_key
-portfolio_deploy_key.pub
-```
-
-Them public key vao server:
+Self-hosted runner se build project truc tiep tren Ubuntu server, nen server can co Node.js va npm.
 
 ```bash
-mkdir -p ~/.ssh
-cat portfolio_deploy_key.pub >> ~/.ssh/authorized_keys
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/authorized_keys
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
 ```
 
-Neu tao key tren may local, copy public key len server:
+Kiem tra:
 
 ```bash
-ssh-copy-id -i portfolio_deploy_key.pub ubuntu@YOUR_SERVER_IP
+node -v
+npm -v
 ```
 
-Kiem tra dang nhap bang private key:
-
-```bash
-ssh -i portfolio_deploy_key ubuntu@YOUR_SERVER_IP
-```
-
-## 5. Cau hinh GitHub Secrets
+## 5. Cai GitHub Actions self-hosted runner
 
 Vao GitHub repository:
 
 ```text
-Settings -> Secrets and variables -> Actions -> New repository secret
+Settings -> Actions -> Runners -> New self-hosted runner
 ```
 
-Them cac secret sau:
+Chon:
 
 ```text
-SSH_HOST=YOUR_SERVER_IP
-SSH_USER=ubuntu
-SSH_KEY=noi dung file portfolio_deploy_key
-SSH_PORT=22
-DEPLOY_PATH=/var/www/portfolio
+Runner image: Linux
+Architecture: x64
 ```
 
-Xem noi dung private key:
+GitHub se hien cac lenh setup moi nhat. Chay cac lenh do tren Ubuntu server, thuong co dang:
 
 ```bash
-cat portfolio_deploy_key
+mkdir actions-runner
+cd actions-runner
+curl -o actions-runner-linux-x64.tar.gz -L GITHUB_RUNNER_DOWNLOAD_URL
+tar xzf ./actions-runner-linux-x64.tar.gz
+./config.sh --url https://github.com/THHuy/portfolio --token GITHUB_RUNNER_TOKEN --labels portfolio
 ```
 
-Copy toan bo noi dung, bao gom:
+Luu y:
+
+- Khong copy token trong README nay. Token phai lay truc tiep tu GitHub UI vi token co thoi han.
+- Label `portfolio` la bat buoc vi workflow dang dung `runs-on: [self-hosted, linux, portfolio]`.
+- GitHub se tu co label `self-hosted` va `linux`.
+
+## 6. Cai runner thanh service
+
+Sau khi config runner xong, cai thanh system service de runner tu chay sau khi reboot:
+
+```bash
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+Kiem tra service:
+
+```bash
+sudo ./svc.sh status
+```
+
+Tren GitHub, vao:
 
 ```text
------BEGIN OPENSSH PRIVATE KEY-----
-...
------END OPENSSH PRIVATE KEY-----
+Settings -> Actions -> Runners
 ```
 
-## 6. Cho phep reload Nginx khong can password
+Neu runner hien `Idle` hoac `Online` la dung.
+
+## 7. Cap quyen deploy cho runner
+
+Tim user dang chay runner:
+
+```bash
+ps aux | grep actions-runner
+```
+
+Neu ban cai service bang user `ubuntu`, runner thuong chay bang user `ubuntu`.
+
+Cap quyen ghi vao thu muc deploy:
+
+```bash
+sudo chown -R ubuntu:www-data /var/www/portfolio
+sudo chmod -R 775 /var/www/portfolio
+```
+
+Neu user khac `ubuntu`, thay `ubuntu` bang user do.
+
+## 8. Cho phep reload Nginx khong can password
 
 GitHub Actions se chay:
 
@@ -176,10 +199,10 @@ Neu server yeu cau sudo password, pipeline se fail. Mo sudoers:
 sudo visudo
 ```
 
-Them dong sau, thay `ubuntu` bang user SSH cua ban neu khac:
+Them dong sau, thay `ubuntu` bang user dang chay runner neu khac:
 
 ```text
-ubuntu ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /bin/systemctl reload nginx
+ubuntu ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /bin/systemctl reload nginx, /usr/bin/systemctl reload nginx
 ```
 
 Kiem tra:
@@ -189,15 +212,17 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 7. Chay pipeline
+## 9. Chay pipeline
 
 Moi lan push len nhanh `main`, GitHub Actions se tu dong:
 
 - Checkout source code.
-- Cai dependencies bang `npm ci`.
-- Build bang `npm run build`.
-- Xoa file cu trong `/var/www/portfolio`.
-- Upload thu muc `dist` len server.
+- Kiem tra build tren GitHub-hosted runner.
+- Chay job deploy tren self-hosted runner dat tren Ubuntu server.
+- Cai dependencies bang `npm ci` tren server.
+- Build bang `npm run build` tren server.
+- Xoa file cu trong `/var/www/portfolio` tren server.
+- Copy thu muc `dist` vao `/var/www/portfolio`.
 - Reload Nginx.
 
 Lenh push:
@@ -214,7 +239,7 @@ Theo doi pipeline tai:
 GitHub repository -> Actions -> Portfolio CI/CD
 ```
 
-## 8. Cai HTTPS bang Certbot
+## 10. Cai HTTPS bang Certbot
 
 Sau khi domain da tro dung ve server:
 
@@ -229,23 +254,49 @@ Kiem tra auto renew:
 sudo certbot renew --dry-run
 ```
 
-## 9. Loi thuong gap
+## 11. AWS security group
 
-### Pipeline loi SSH
+Vi deploy dung self-hosted runner, AWS khong can mo SSH inbound cho GitHub Actions.
 
-Kiem tra lai:
+Nen cau hinh inbound nhu sau:
 
-- `SSH_HOST` dung IP server.
-- `SSH_USER` dung user Ubuntu.
-- `SSH_KEY` la private key, khong phai public key.
-- Public key da nam trong `~/.ssh/authorized_keys` tren server.
+```text
+HTTP  80   0.0.0.0/0
+HTTPS 443  0.0.0.0/0
+SSH   22   IP_CA_NHAN_CUA_BAN
+```
+
+Khong can mo SSH 22 cho GitHub.
+
+Outbound nen cho phep server truy cap internet de runner ket noi GitHub:
+
+```text
+Outbound: allow all
+```
+
+## 12. Loi thuong gap
+
+### Job deploy bi treo o trang thai queued
+
+Kiem tra:
+
+- Runner tren GitHub co trang thai `Online`.
+- Workflow co dung label `portfolio`.
+- Service runner dang chay tren server.
+
+Lenh kiem tra:
+
+```bash
+cd ~/actions-runner
+sudo ./svc.sh status
+```
 
 ### Pipeline loi permission khi upload
 
 Chay tren server:
 
 ```bash
-sudo chown -R $USER:www-data /var/www/portfolio
+sudo chown -R ubuntu:www-data /var/www/portfolio
 sudo chmod -R 775 /var/www/portfolio
 ```
 

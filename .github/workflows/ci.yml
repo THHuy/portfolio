@@ -30,8 +30,8 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Deploy to Ubuntu server
-    runs-on: ubuntu-latest
+    name: Deploy on Ubuntu self-hosted runner
+    runs-on: [self-hosted, linux, portfolio]
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
@@ -51,38 +51,16 @@ jobs:
       - name: Build production files
         run: npm run build
 
-      - name: Prepare remote directory
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            if [ -z "$DEPLOY_PATH" ] || [ "$DEPLOY_PATH" = "/" ]; then
-              echo "DEPLOY_PATH is empty or unsafe"
-              exit 1
-            fi
-            mkdir -p "$DEPLOY_PATH"
-            find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-
-      - name: Upload dist to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: dist/*
-          target: ${{ secrets.DEPLOY_PATH }}
-          strip_components: 1
+      - name: Deploy files locally
+        run: |
+          DEPLOY_PATH="/var/www/portfolio"
+          if [ -z "$DEPLOY_PATH" ] || [ "$DEPLOY_PATH" = "/" ]; then
+            echo "DEPLOY_PATH is empty or unsafe"
+            exit 1
+          fi
+          mkdir -p "$DEPLOY_PATH"
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a dist/. "$DEPLOY_PATH"/
 
       - name: Reload Nginx
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: sudo nginx -t && sudo systemctl reload nginx
+        run: sudo nginx -t && sudo systemctl reload nginx
