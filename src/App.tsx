@@ -81,7 +81,7 @@ function App() {
         onToggleMenu={() => setMenuOpen((value) => !value)}
         onNav={scrollToSection}
       />
-      <main>
+      <main className="relative z-10">
         <Hero role={roles[roleIndex]} onNav={scrollToSection} />
         <About />
         <CurrentRole />
@@ -92,7 +92,9 @@ function App() {
         <Education />
         <Contact />
       </main>
-      <Footer year={currentYear} />
+      <div className="relative z-10">
+        <Footer year={currentYear} />
+      </div>
     </div>
   );
 }
@@ -209,7 +211,7 @@ function LightfallBackground({ dark }: { dark: boolean }) {
   return (
     <canvas
       ref={canvasRef}
-      className="pointer-events-none fixed inset-0 -z-10"
+      className="pointer-events-none fixed inset-0 z-0"
       aria-hidden="true"
     />
   );
