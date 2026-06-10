@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronRight,
@@ -72,8 +72,8 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 transition-colors dark:bg-ink-950 dark:text-slate-100">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.12),transparent_28%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.14),transparent_28%)]" />
+    <div className="relative isolate min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 transition-colors dark:bg-ink-950 dark:text-slate-100">
+      <LightfallBackground dark={dark} />
       <Header
         dark={dark}
         menuOpen={menuOpen}
@@ -94,6 +94,124 @@ function App() {
       </main>
       <Footer year={currentYear} />
     </div>
+  );
+}
+
+type LightRay = {
+  x: number;
+  y: number;
+  length: number;
+  speed: number;
+  width: number;
+  alpha: number;
+  drift: number;
+};
+
+function LightfallBackground({ dark }: { dark: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    let animationFrame = 0;
+    let width = 0;
+    let height = 0;
+    let rays: LightRay[] = [];
+
+    const createRay = (startAbove = false): LightRay => ({
+      x: Math.random() * (width + 240) - 120,
+      y: startAbove ? Math.random() * -height : Math.random() * height,
+      length: 120 + Math.random() * 260,
+      speed: 0.45 + Math.random() * 1.35,
+      width: 0.8 + Math.random() * 1.8,
+      alpha: 0.12 + Math.random() * 0.3,
+      drift: -0.24 + Math.random() * 0.18,
+    });
+
+    const resize = () => {
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      const count = Math.max(18, Math.min(44, Math.floor(width / 42)));
+      rays = Array.from({ length: count }, () => createRay());
+    };
+
+    const draw = () => {
+      const baseGradient = context.createLinearGradient(0, 0, width, height);
+      if (dark) {
+        baseGradient.addColorStop(0, "#020617");
+        baseGradient.addColorStop(0.48, "#07111f");
+        baseGradient.addColorStop(1, "#03121a");
+      } else {
+        baseGradient.addColorStop(0, "#f8fafc");
+        baseGradient.addColorStop(0.5, "#eef9fb");
+        baseGradient.addColorStop(1, "#f1f5f9");
+      }
+
+      context.fillStyle = baseGradient;
+      context.fillRect(0, 0, width, height);
+
+      const glow = context.createRadialGradient(width * 0.18, height * 0.08, 0, width * 0.18, height * 0.08, width * 0.64);
+      glow.addColorStop(0, dark ? "rgba(34, 211, 238, 0.2)" : "rgba(14, 165, 233, 0.16)");
+      glow.addColorStop(1, "rgba(34, 211, 238, 0)");
+      context.fillStyle = glow;
+      context.fillRect(0, 0, width, height);
+
+      context.save();
+      context.globalCompositeOperation = dark ? "screen" : "multiply";
+
+      rays.forEach((ray, index) => {
+        ray.y += ray.speed;
+        ray.x += ray.drift;
+
+        if (ray.y - ray.length > height + 80 || ray.x < -220) {
+          rays[index] = createRay(true);
+          rays[index].x = Math.random() * (width + 180);
+        }
+
+        const gradient = context.createLinearGradient(ray.x, ray.y - ray.length, ray.x + ray.length * 0.14, ray.y);
+        gradient.addColorStop(0, "rgba(34, 211, 238, 0)");
+        gradient.addColorStop(0.42, dark ? `rgba(125, 211, 252, ${ray.alpha})` : `rgba(14, 116, 144, ${ray.alpha * 0.44})`);
+        gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+        context.strokeStyle = gradient;
+        context.lineWidth = ray.width;
+        context.beginPath();
+        context.moveTo(ray.x, ray.y - ray.length);
+        context.lineTo(ray.x + ray.length * 0.14, ray.y);
+        context.stroke();
+      });
+
+      context.restore();
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    resize();
+    draw();
+    window.addEventListener("resize", resize);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", resize);
+    };
+  }, [dark]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none fixed inset-0 -z-10"
+      aria-hidden="true"
+    />
   );
 }
 
